@@ -1,252 +1,355 @@
 # lifesci-paper-deconstructor
 
-> Turn a life-science paper PDF into a Chinese Word close-reading report — core
-> conclusions, figure-by-figure and panel-by-panel analysis, an appraisal of the
-> paper's "soul" and novelty, and a verdict on whether it is top-journal calibre.
+> A [Claude Code](https://claude.com/claude-code) skill that turns a life-science
+> paper PDF into a close-reading report — core conclusions, figure-by-figure and
+> panel-by-panel analysis, an appraisal of the paper's "soul" and novelty, and a
+> verdict on whether it is top-journal calibre.
 
-把一篇生命科学论文的 PDF，拆解成一份**有判断的中文精读报告**。
+Give it a paper PDF. Get back a written report that takes a position on the
+paper, backed by specific figures and specific numbers.
 
-适用领域：生命科学（含生物信息学、医学、神经科学、免疫学、肿瘤生物学）。
+**The report is written in Chinese** — the deliverable is a `.docx` typeset for
+Chinese readers. The skill itself, and this README, are in English.
 
----
-
-## 目录
-
-- [它解决什么问题](#它解决什么问题)
-- [产出](#产出)
-- [铁律](#铁律)
-- [工作流程](#工作流程)
-- [两个脚本](#两个脚本)
-- [评分标准](#评分标准)
-- [安装](#安装)
-- [用法](#用法)
-- [报告结构](#报告结构)
-- [已知限制](#已知限制)
-- [验证记录](#验证记录)
-- [许可](#许可)
+Scope: life sciences, including bioinformatics, medicine, neuroscience,
+immunology and cancer biology.
 
 ---
 
-## 它解决什么问题
+## Table of contents
 
-摘要和图注，读者自己就能读。一份精读报告的增量只可能来自三件事：
-
-1. **每张图在证据链上的位置** —— 图注说的是"做了什么实验、看到什么现象"；报告要说的是"这个现象支撑了哪一步论证，还差什么"。
-2. **证据强度的判断** —— 这条结论有几条独立证据？是相关还是因果？n 是多少？有没有正交验证？
-3. **文章的边界** —— 它真正证明了什么，以及它在哪些地方越过了数据。
-
-所以判断一份报告是否失败的标准很简单：**这句话读者从原文里能直接读到吗？** 能直接读到的，删掉或压缩；读不到的，才是要写透的。
-
-这也意味着这个 skill **不做**下面这些事：把摘要翻译一遍、逐面板复述图注、用"设计精巧""工作量巨大"这类形容词代替判断、给一个模棱两可的"有一定创新性"。
+- [Why it exists](#why-it-exists)
+- [What you get](#what-you-get)
+- [The iron rules](#the-iron-rules)
+- [How it works](#how-it-works)
+- [The two scripts](#the-two-scripts)
+- [The appraisal rubric](#the-appraisal-rubric)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Report structure](#report-structure)
+- [Known limitations](#known-limitations)
+- [Verification](#verification)
+- [Licence](#licence)
 
 ---
 
-## 产出
+## Why it exists
 
-一次运行产出：
+Anyone can read the abstract and the figure legends. The only value a
+close-reading report can add is three things:
 
-| 文件 | 说明 |
+1. **Where each figure sits in the argument.** A legend says what experiment was
+   run and what was seen. A report has to say which step of the argument that
+   observation supports, and what is still missing.
+2. **A judgement of evidential strength.** How many independent lines of evidence
+   back this conclusion? Correlation or causation? What is *n*? Is there
+   orthogonal validation?
+3. **The paper's boundary.** What it actually demonstrates, and where it reaches
+   past its data.
+
+So the test for any sentence in the report is: **could the reader have gotten
+this from the paper directly?** If yes, cut it or compress it. What the reader
+*cannot* get directly is the only thing worth writing.
+
+That also defines what this skill refuses to do: translate the abstract, restate
+figure legends panel by panel, substitute adjectives ("elegant design",
+"substantial dataset") for judgement, or hedge a verdict into "somewhat novel".
+
+---
+
+## What you get
+
+| File | What it is |
 |---|---|
-| `精读报告.docx` | **最终交付物**。中文排版，含内嵌原图、表格、分级标题 |
-| `report.md` | 生成 docx 之前的 markdown 草稿，便于修改后重新出文档 |
-| `work/` | 中间产物（见 [两个脚本](#两个脚本)），保留不动，可复现 |
+| `精读报告.docx` | **The deliverable.** A Chinese-typeset Word document with the original figures embedded, tables, and a proper heading hierarchy. |
+| `report.md` | The markdown the `.docx` is built from, so you can revise and rebuild. |
+| `work/` | Intermediates — cropped figures, page renders, extracted text, the manifest. Kept, so the run is reproducible. |
 
-Word 文档的排版是固定的（中文字体、标题层级、表格样式），不依赖模型临场写脚本。
-
----
-
-## 铁律
-
-这是整个 skill 的核心约束，也是它区别于"让模型总结一下这篇文章"的地方。
-
-- **不许编造。** 每一个结论、样本量、p 值都必须来自原文或原图。看不到就说"该面板在原图中分辨率不足，无法确认"。宁可空着，也不要猜。
-
-- **数字只能来自文字，不能来自眼睛。** 报告里的每一个数字——样本量、p 值、倍数、百分比、坐标值——只有在**正文、图注或方法里写明**时才能引用。不要从图上目测读数：判断哪根柱子更高、哪条曲线在上，眼睛是可靠的；判断"AUC 约 0.15"，眼睛不可靠，而且这类错误读者几乎无从发现。需要描述趋势时用定性语言。
-
-  这条规则的代价很低：一篇论文里真正重要的数字，作者一定会在正文或图注里写出来。**如果一张图的结论只能靠目测数值才能说清，那就在报告里说明这一点**——它本身就是一个关于该图证据强度的判断。
-
-- **区分作者的说法和数据的说法。** 作者在 Discussion 里说"这提示 X 可能是 Y 的驱动因素"，和 Figure 5 里真的做了 rescue 实验，是两回事。报告里要分开表述。
-
-- **判断要给依据。** 说"这是顶刊级别"必须指出是哪条证据越过了门槛；说"不够"必须指出最短的那块板。
-
-- **补充图常常不在你手里的 PDF 里，而且必须在报告里说出来。** 正文会大量引用 `Supplementary Fig. 5`，但这些图可能根本没随主文件提供。**没看到就不要写它的内容**，并在报告里明确告诉读者这一限制。读者不知道补充材料缺失，就会把无法核实的转述当成已证实的结论——这是这类报告最容易造成的误导。
+Typography is fixed and shared across every report, rather than being whatever
+ad-hoc script the moment produced.
 
 ---
 
-## 工作流程
+## The iron rules
 
-| 步骤 | 做什么 |
+These are the core of the skill, and the reason it is not just "ask a model to
+summarise this paper".
+
+- **No fabrication.** Every conclusion, sample size and *p*-value must come from
+  the paper or its figures. If a panel is unreadable, say *"this panel is not
+  legible at the resolution available"* and leave it. Better an empty field than
+  a guess.
+
+- **Numbers may come from text, never from eyes.** Every number in the report —
+  *n*, *p*, fold-change, percentage, axis value — may be cited **only** when
+  written in the body, legend or methods. Do not read values off a graph by eye.
+  Judging which bar is taller or which curve is on top is reliable; reading off
+  "AUC ≈ 0.15" is not, and a reader has almost no way to catch that error. Use
+  qualitative language for trends instead — "markedly lower", "essentially
+  absent", "same direction as the control".
+
+  The cost of this rule is low: any number that matters, the authors will have
+  written down. And **if a figure's conclusion can only be stated by reading its
+  numbers off the plot, say so in the report** — that fact is itself a judgement
+  about the figure's evidential strength.
+
+- **Separate what the authors claim from what the data show.** "This suggests X
+  may drive Y" in the Discussion, and an actual rescue experiment in Figure 5,
+  are two different things. The report must keep them apart.
+
+- **Every judgement carries its evidence.** "Top-journal calibre" must name the
+  evidence that cleared the bar; "not good enough" must name the weakest plank.
+
+- **Supplementary figures are usually not in the PDF you were handed — and the
+  report must say so.** The body cites `Supplementary Fig. 5` freely, but those
+  figures are often not bundled with the main file. **Do not write about what you
+  have not seen**, and state the limitation explicitly (the one-minute summary
+  has a dedicated line for it). A reader who does not know the supplement is
+  missing will take unverifiable paraphrase for established fact — the single
+  easiest way for a report like this to mislead.
+
+---
+
+## How it works
+
+| Step | What happens |
 |---|---|
-| **0 — 确认输入** | 默认输入是本地 PDF 路径。没给路径就问一次，不要猜文件名 |
-| **1 — 预处理 PDF** | 跑 `pdf_prep.py`，得到图注全集、裁好的图、整页渲染、分页正文、质量警告 |
-| **2 — 提炼核心结论** | 一句话结论 + 3–5 条支撑结论（每条标注来自哪张图）+ 逻辑主线（问题→策略→发现→推论） |
-| **3 — 逐图解析** | 主图走**面板级**，补充图走**图级**。每张主图末尾给一段"证明了什么 / **没证明什么**" |
-| **4 — 灵魂与创新性评估** | 对照 `references/top-journal-rubric.md` 的七个维度，给出明确档位和依据 |
-| **5 — 撰写、润色、出文档** | 写 `report.md` → 对照润色清单逐条改 → `build_docx.py` 生成 Word |
+| **0 — Confirm input** | The input is a local PDF path. If none was given, ask once; do not guess a filename. If a supplement PDF is provided too, it goes through step 1 as well. |
+| **1 — Preprocess the PDF** | Run `pdf_prep.py`: all figure captions in one file, cropped figures at 200 DPI, full-page renders, per-page text, and a data-hygiene note. |
+| **2 — Extract the argument** | One-sentence conclusion, 3–5 supporting findings (each tagged with the figure it came from), and the logical spine: problem → strategy → finding → inference. |
+| **3 — Figure analysis** | **Main figures panel by panel; supplementary figures figure by figure.** Each main figure ends with a paragraph on what it proves and **what it does not**. |
+| **4 — Appraise soul and novelty** | Seven dimensions from `references/top-journal-rubric.md`, with an explicit tier and the evidence for it. |
+| **5 — Write, polish, typeset** | Draft `report.md`, work the polish checklist, then build the `.docx`. |
 
-第 3 步的面板级主句式：
+Reading order for step 2: title → abstract → last paragraph of the Introduction
+(where the authors state the problem) → every figure legend → first two
+paragraphs of the Discussion (where they state the finding) → back to the body to
+check the numbers.
+
+For step 3, the panel-level sentence pattern is fixed, and reads like this in the
+report:
 
 ```
-从图1a可以看出，<这个面板做了什么、看到了什么>，这<支撑/排除了>了<核心结论的哪一环>。
+从图1a可以看出，<what this panel did and showed>，这<supports/rules out>了<which link of the argument>。
 ```
 
-每个面板要回答四件事：**测的是什么**（设计意图，不是复述坐标轴）、**看到什么**、**对核心结论贡献了什么**、**证据强度**（n、模型体系、统计是否匹配、有没有该做的对照没做）。
+Each panel answers four things: **what was measured** (the design intent — not a
+translation of the axis labels, but e.g. "a genome-wide CRISPR screen rather than
+candidate validation, so the authors were looking for unknown drivers"), **what
+was seen**, **what it contributes to the core claim**, and **how strong that
+evidence is** (*n*, model system, whether the statistics fit the design, whether a
+missing control should have been there).
 
 ---
 
-## 两个脚本
+## The two scripts
 
-两个都是自包含的 Python 脚本，用 `uv run --with ...` 拉起依赖，不需要预装环境。
+Both are self-contained Python scripts run through `uv run --with ...`. Nothing
+needs to be installed beforehand.
 
 ### `scripts/pdf_prep.py`
 
-把 PDF 里"机器该干的活"干完一次，让阅读阶段专注于生物学而不是 PDF 几何。
+Does the mechanical part once, so the reading pass can be about biology instead
+of PDF geometry.
 
 ```bash
-uv run --with pymupdf --with numpy python scripts/pdf_prep.py "<论文.pdf>" --out work/
+uv run --with pymupdf --with numpy python scripts/pdf_prep.py "<paper.pdf>" --out work/
 ```
 
-| 参数 | 默认 | 说明 |
+| Argument | Default | Meaning |
 |---|---|---|
-| `pdf` | — | 论文 PDF 路径 |
-| `--out` | 必填 | 输出目录 |
-| `--page-dpi` | 130 | 整页渲染 DPI |
-| `--fig-dpi` | 200 | 裁图 DPI |
-| `--pad` | 4.0 | 裁切框外扩（点） |
-| `--max-pages` | 0（全部） | 只处理前 N 页 |
-| `--debug-page` | 0 | 打印某一页的行带结构，用于调裁剪 |
+| `pdf` | — | path to the paper PDF |
+| `--out` | required | output directory |
+| `--page-dpi` | 130 | full-page render DPI |
+| `--fig-dpi` | 200 | cropped figure DPI |
+| `--pad` | 4.0 | padding, in points, around each crop |
+| `--max-pages` | 0 (all) | stop after N pages |
+| `--debug-page` | 0 | print the band structure of one page, for tuning the crop |
 
-产出：
+Output:
 
-| 文件 | 用途 |
+| File | Use |
 |---|---|
-| `captions.md` | **先读这个。** 所有图注集中在一起，最快看清文章有几张图、每张声称了什么 |
-| `figures/*.png` | 裁好的图（文件名带页码，如 `fig-001__p02.png`），用于面板级阅读 |
-| `pages/page-NN.png` | 整页渲染，需要看排版上下文时读 |
-| `pages/page-NN.txt` | 分页正文，用于定位结论的原文出处 |
-| `fulltext.txt` | 全文 |
-| `manifest.json` | 图 → 页码映射、图注、裁切框，机器可读 |
-| `notes.md` | **提取质量警告**：希腊字母在文本层丢失、补充材料引用数量。动笔前扫一眼 |
+| `captions.md` | **Read this first.** Every figure caption in one place — the fastest way to see how many figures the paper has and what each claims. |
+| `figures/*.png` | Cropped figures, page number in the filename (`fig-001__p02.png`), for panel-level reading. |
+| `pages/page-NN.png` | Full-page renders, when you need the layout context. |
+| `pages/page-NN.txt` | Per-page body text, for locating where a claim is made. |
+| `fulltext.txt` | The whole thing. |
+| `manifest.json` | Figure → page mapping, captions, crop boxes. Machine-readable. |
+| `notes.md` | **Data-hygiene warnings:** Greek letters lost from the text layer, and how many times the body cites supplementary material. Skim it before writing. |
 
-图的定位是**版面启发式**，不依赖任何期刊模板（已在 Nature Communications、Cell Reports、Genome Biology、bioRxiv 版面上验证）。
+Figure detection is a **layout heuristic with no per-journal rules**. It has been
+checked against Nature Communications, Cell Reports, Genome Biology and bioRxiv
+layouts.
 
-> 注意：`notes.md` 的内容是**条件生成**的——没有检测到希腊字母丢失、且正文未引用补充材料时，它就只有一行标题。这是正常行为，不是失败。
+> `notes.md` is generated conditionally — if the PDF has no Greek-letter loss and
+> the body never cites the supplement, it contains only a title line. That is
+> correct behaviour, not a failure.
 
 ### `scripts/build_docx.py`
 
-把 markdown 报告渲染成中文排版的 Word 文档。
+Renders the markdown report into a Chinese-typeset Word document.
 
 ```bash
 uv run --with python-docx python scripts/build_docx.py "report.md" -o "精读报告.docx"
 ```
 
-| 参数 | 说明 |
+| Argument | Meaning |
 |---|---|
-| `markdown` | 报告 markdown 文件 |
-| `-o` / `--out` | 输出 .docx（默认放在 md 同目录） |
-| `--base-dir` | 解析图片相对路径的基准目录（默认取 md 所在目录） |
+| `markdown` | the report markdown file |
+| `-o` / `--out` | output `.docx` (defaults to alongside the markdown) |
+| `--base-dir` | base directory for resolving relative image paths (defaults to the markdown's directory) |
 
-支持的 markdown：`#`–`####` 标题（应用中文字体）、粗体/斜体/行内代码、无序列表、表格、图片。图片路径相对于 md 文件。
+Supported markdown: `#`–`####` headings (Chinese heading fonts applied), bold /
+italic / inline code, unordered lists, tables, images. Image paths are relative
+to the markdown file.
 
-**图片找不到时不会静默丢弃**——会在正文里留一个 `[缺图: 文件名]` 标记，报告里会告诉你哪张没插进去。
+**A missing image is not silently dropped** — it leaves a `[缺图: filename]`
+marker in the body, and the skill reports which figures did not make it in.
 
 ---
 
-## 评分标准
+## The appraisal rubric
 
-`references/top-journal-rubric.md` 定义了七个评估维度和四档判定标尺。
+`references/top-journal-rubric.md` defines seven dimensions and a four-tier
+verdict scale.
 
-**七个维度**：A 概念创新 · B 因果链完整性 · C 证据独立性与正交性 · D 方法学／资源贡献 · E 转化距离 · F 严谨性与可重复性 · G 时机与竞争格局
+**Dimensions:** A conceptual advance · B completeness of the causal chain ·
+C independence and orthogonality of evidence · D methodological or resource
+contribution · E distance to translation · F rigour and reproducibility ·
+G timing and competitive landscape
 
-**四档判定**：
+**Tiers:**
 
-| 判定 | 特征 |
+| Verdict | Characteristics |
 |---|---|
-| 顶刊级（CNS 主刊） | A 维度提出领域级新概念；B、C 无短板 |
-| 领域顶刊级（Nature 子刊 / Cell Reports / PNAS / Genome Biology 等） | B、C 扎实完整，A 中等——绝大多数扎实工作的位置 |
-| 扎实但不够 | B 或 C 有明显缺口（缺 rescue、缺体内、单一线索） |
-| 增量工作 | A 低 + B 有断裂，结论可预期 |
+| Top journal (CNS) | Dimension A proposes a field-level new concept; B and C have no weak spot |
+| Field-leading (Nature sub-journals, Cell Reports, PNAS, Genome Biology, …) | B and C solid and complete, A moderate — where most solid work lands |
+| Solid but not enough | A clear gap in B or C: no rescue, no in vivo, a single line of evidence |
+| Incremental | Low A plus a break in B; the conclusion is predictable |
 
-评估必须落到**具体的图、具体的数据**上。"证据链在 Figure 4 断掉了：体外敲低后表型明确，但 Figure 4 的动物实验只用了 n=3 且没有回补组"是合格的判断；"证据尚不够充分"不是。
+Appraisals must attach to **specific figures and specific data**. *"The evidence
+chain breaks at Figure 4: the knockdown phenotype is clean in vitro, but the
+in vivo experiment in Figure 4 is n=3 with no rescue arm"* is a passing
+judgement. *"The evidence is not yet sufficient"* is not.
 
 ---
 
-## 安装
+## Installation
 
 ```bash
 git clone https://github.com/JieRanDong/lifesci-paper-deconstructor.git \
   ~/.claude/skills/lifesci-paper-deconstructor
 ```
 
-Claude Code 从 `~/.claude/skills/` 发现 skill，克隆到该目录即可。
+Claude Code discovers skills in `~/.claude/skills/`, so cloning there is the
+whole install.
 
-### 依赖
+### Requirements
 
-| 依赖 | 说明 |
+| Requirement | Notes |
 |---|---|
-| [Claude Code](https://claude.com/claude-code) | 宿主 |
-| [`uv`](https://docs.astral.sh/uv/) | 两个脚本都靠 `uv run --with` 拉起依赖，无需预装 |
-| `pymupdf`, `numpy` | 仅 `pdf_prep.py` 需要，自动拉取 |
-| `python-docx` | 仅 `build_docx.py` 需要，自动拉取 |
+| [Claude Code](https://claude.com/claude-code) | the host |
+| [`uv`](https://docs.astral.sh/uv/) on `PATH` | both scripts pull their dependencies via `uv run --with` |
+| `pymupdf`, `numpy` | used by `pdf_prep.py` only; fetched automatically |
+| `python-docx` | used by `build_docx.py` only; fetched automatically |
 
-不需要 API key，不产生任何调用费用。
+No API keys, no cost. If you hit a GitHub connection error while cloning, this
+repository was pushed over SSH because `github.com:443` is intermittently
+unreachable from some networks — see [Known limitations](#known-limitations).
 
 ---
 
-## 用法
+## Usage
 
-由自然语言触发，不需要点名调用。触发词包括：精读文献、拆解论文、文献汇报、组会讲文章、journal club、figure 解析、图表讲了什么、这篇文章创新性如何、够不够顶刊、这篇 paper 的亮点和硬伤、读不懂这篇论文、帮我总结这篇文章——或者直接丢一个 PDF 路径过来。
+The skill triggers from natural language; you do not invoke it by name. It fires
+on: *close-read this paper*, *break down this paper*, *journal club*, *group
+meeting report*, *explain each figure*, *what does this figure show*, *is this
+novel enough for a top journal*, *what are this paper's strengths and weaknesses*
+— or simply handing over a PDF path.
+
+Example prompts:
 
 ```
-帮我精读这篇论文：D:/papers/pnas.202020478.pdf
-这篇 paper 够不够 Nature 子刊？逐图讲一下。
-组会要讲这篇文章，帮我做一份报告。
-Supplementary 我也有一份，一起看了。
+Close-read this paper for me: D:/papers/pnas.202020478.pdf
+Walk me through every figure and tell me whether this is Nature-subjournal quality.
+I have to present this at group meeting — write me the report.
+I've got the supplementary PDF too, read that as well.
 ```
 
-如果同时提供补充材料 PDF，主图走面板级、补充图走图级。
+If a supplementary PDF is supplied, main figures are analysed panel by panel and
+supplementary figures figure by figure.
 
 ---
 
-## 报告结构
+## Report structure
 
-`report.md` / `精读报告.docx` 的结构固定，内容按文章调整：
+The markdown and the `.docx` share a fixed structure; the content adapts to the
+paper.
 
 ```
-〇、背景介绍            领域与核心问题 → 此前认识 → 知识缺口 → 本文切入
-一、一分钟速览          一句话结论 / 文章类型 / 补充材料是否随附 / 灵魂指数 / 证据强度
-二、核心结论提炼        一句话 + 支撑结论（标注来自哪张图）+ 逻辑主线及最薄弱一环
-三、逐图解析            主图面板级（含"证明了什么，没证明什么"）/ 补充图图级
-四、灵魂与创新性评估    灵魂 / 七维度表 / 为什么是或不是顶刊 / 最短的那块板
-五、给读者的三句话      值得记住的一点 / 该引在哪 / 顺下去读什么
+〇  Background            field & core question → prior understanding → the gap → this paper's angle
+一  One-minute summary    one-sentence conclusion / paper type / supplement attached? / soul rating / evidence rating
+二  Core argument         the one sentence + supporting findings (tagged with figures) + the spine and its weakest link
+三  Figure analysis       main figures panel by panel (incl. "what it proves, what it doesn't") / supplements figure by figure
+四  Soul & novelty        the soul / seven-dimension table / why it is or is not top-journal / the weakest plank
+五  Three sentences       what to remember / where to cite it / what to read next
 ```
 
-「背景介绍」有专门的写法要求（四件事、三条忌讳），因为它决定了后面所有内容读起来有没有根；「润色清单」有 8 条，写完初稿必须逐条过——其中第 5 条"数字回查"要求报告里每一个数字都能指回原文的某一句话，指不回去的就是目测来的，必须删掉或改成定性描述。
+Two sections carry extra requirements. **Background** must install a coordinate
+system — what problem the paper solves and why it is worth solving — in four
+moves (field and core question, prior understanding, the knowledge gap, this
+paper's angle), with three prohibitions (don't copy the Introduction's first
+paragraph, don't write a field review, don't dodge why the field was stuck).
+**The polish checklist** has eight items, of which item 5 is the load-bearing
+one: every number in the report must trace back to a sentence in the source;
+anything that cannot is a number read off a plot by eye and must be deleted or
+turned into a qualitative statement.
 
 ---
 
-## 已知限制
+## Known limitations
 
-- **补充材料必须单独提供。** 正文引用的 `Supplementary Fig. X` 通常不在主 PDF 里；skill 会在报告里明确声明这一限制，而不是转述没看到的内容。
-- **图定位是版面启发式。** 已在四种常见版面上验证，但对双栏/单栏混排、极端排版或图跨页的 PDF 可能失效。若 `manifest.json` 里出现 `no image extracted`，用整页渲染 `pages/page-NN.png` 代替，并在报告里说明。
-- **需要文本层。** 纯扫描版 PDF 没有可提取的正文与图注，脚本会提取不到内容——这种情况需要先做 OCR。
-- **不是文献检索引擎。** 它只处理你已经拿到的 PDF。要检索论文，用文献检索类 skill。
-- **报告是中文的。** 术语首次出现会附英文原文，但整体输出语言为中文。
-- **它给判断，也会给错判断。** 灵魂指数、证据强度、顶刊档位都是基于原文的评估，不是客观事实。报告里每条判断都附了依据，请按依据自行复核。
+- **Supplementary material must be supplied separately.** The `Supplementary
+  Fig. X` the body cites is usually not in the main PDF. The skill states this
+  limitation in the report rather than paraphrasing figures it never saw.
+- **Figure detection is a layout heuristic.** Verified on four common layouts,
+  but it can fail on mixed single/double-column pages, unusual designs, or
+  figures that break across pages. If `manifest.json` contains `no image
+  extracted`, use the full-page render `pages/page-NN.png` instead and say so in
+  the report.
+- **A text layer is required.** Scanned PDFs have no extractable body text or
+  captions; OCR them first.
+- **This is not a literature search tool.** It works on PDFs you already have.
+- **The report is in Chinese.** Terms get their English original on first use,
+  but the output language is Chinese.
+- **It gives judgements, and judgements can be wrong.** The soul rating,
+  evidence rating and tier verdict are assessments of the paper, not facts. Each
+  one carries its stated evidence precisely so you can check it yourself.
 
 ---
 
-## 验证记录
+## Verification
 
-发布前在两个脚本上做了实测（2026-09-17）：
+Both scripts were exercised before publishing (2026-09-17):
 
-- `pdf_prep.py` 跑一篇 9 页 PNAS 论文：识别出 **4 张图**，各带 label、所在页码、图注；产出 26 个文件。`captions.md` 按 `## Fig. 1 (figure on page 2, caption on page 2)` 形式组织；`manifest.json` 含 `figures[].label/page/caption_page/caption`。
-- `notes.md` 的条件生成确认：该论文无希腊字母丢失、未引用补充材料，故文件只有标题行——符合预期。
-- `build_docx.py` 用一份 7 节的中文 fixture 跑通：生成 53 段落、1 个表格（8 行 × 3 列）、H1×1 / H2×6 / H3×9 / H4×2 的标题层级，东亚字体正确应用为宋体。
-- 图片嵌入与缺图处理均验证：真实裁图被内嵌；指向不存在文件的引用**未被嵌入**，而在正文留下 `[缺图: does-not-exist.png]` 标记。
+- **`pdf_prep.py` on a 9-page PNAS paper:** found **4 figures**, each with a label,
+  page number and full caption, across 26 output files. `captions.md` organised
+  them as `## Fig. 1 (figure on page 2, caption on page 2)`; `manifest.json`
+  carried `figures[].label / page / caption_page / caption`.
+- **`notes.md` conditional generation confirmed:** that paper had no Greek-letter
+  loss and cited no supplementary material, so the file contained only its title
+  line — as designed.
+- **`build_docx.py` on a seven-section Chinese fixture:** produced a
+  53-paragraph document with an 8 × 3 table, heading levels H1 ×1 / H2 ×6 /
+  H3 ×9 / H4 ×2, and SimSun applied as the East Asian font.
+- **Image handling confirmed in both directions:** a real cropped figure was
+  embedded; a reference pointing at a nonexistent file was **not** embedded and
+  instead left a `[缺图: does-not-exist.png]` marker in the body.
 
 ---
 
-## 许可
+## Licence
 
-仓库未包含许可文件。未附许可时默认保留所有权利——如需他人复用，请自行添加。
+No licence file is included. Absent one, the default is all rights reserved —
+add one if you intend others to reuse this.
